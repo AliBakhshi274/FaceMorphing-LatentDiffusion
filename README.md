@@ -49,7 +49,3 @@ Our experiments indicate that applying a negative guidance weight of **w=0.5** o
 2. Open the provided Colab notebook
 3. Execute the setup cells
 4. Run `run_all_experiments.py` followed by `evaluate_all_models.py`
-
----
-
-**For questions or collaborations, feel free to open an issue.**
