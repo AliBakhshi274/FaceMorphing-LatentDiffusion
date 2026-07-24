@@ -8,16 +8,21 @@ import pandas as pd
 from facenet_pytorch import MTCNN
 from PIL import Image
 
+
+# Define core directories for datasets, ground-truth bona fide images, and experiment outputs
 BASE_DIR = "/content/drive/MyDrive/HCML_Project/MAD22_Data/extracted_images/original_sorted"
 BONAFIDE_DIR = os.path.join(BASE_DIR, 'BonaFide')
 RESULTS_DIR = "./final_experiments_results"
 OUTPUT_CSV = "./final_comparison_metrics.csv"
-THRESHOLD = 0.10 
+
+# Set the strict FR verification threshold (tau=0.321) derived from the CASIA-webFace genuine distribution
+THRESHOLD = 0.321 
 
 print("Loading ElasticFace Model for Evaluation...")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 sys.path.insert(0, '/content/drive/MyDrive/HCML_Project/NegFaceDiff/face_recognition_training')
 
+# Init the MTCNN face detector and the pretrained ElasticFace model for biometric evaluation
 mtcnn = MTCNN(image_size=112, margin=0, keep_all=False, post_process=False, device=device)
 spec = importlib.util.spec_from_file_location("iresnet_module", '/content/drive/MyDrive/HCML_Project/NegFaceDiff/face_recognition_training/backbones/iresnet.py')
 iresnet = importlib.util.module_from_spec(spec)
@@ -29,8 +34,7 @@ fr_model.eval()
 
 
 
-
-# Extract normalized face embedding from an image
+# Extract and L2-normalize high-dimensional biometric embeddings from the input face image
 def get_feature(img_path):
     try:
         img = Image.open(img_path).convert('RGB')
@@ -48,32 +52,41 @@ if not os.path.exists(RESULTS_DIR):
     print("Results directory not found. Please run experiments first.")
     sys.exit()
 
-# Discover evaluated architectures from the experiment results directory
+
+# Discover all evaluated architectures from the results directory to begin batch evaluation
 models_tested = [m for m in os.listdir(RESULTS_DIR) if os.path.isdir(os.path.join(RESULTS_DIR, m))]
 
-# Iterate over generated samples and compute identity similarities
+
+# compute cosine similarities against reference identities
 for model_name in models_tested:
+
     model_path = os.path.join(RESULTS_DIR, model_name)
     datasets = [d for d in os.listdir(model_path) if os.path.isdir(os.path.join(model_path, d))]
     
     for dataset in datasets:
+
         dataset_path = os.path.join(model_path, dataset)
         morph_folders = [m for m in os.listdir(dataset_path) if os.path.isdir(os.path.join(dataset_path, m))]
         
         for morph_name in morph_folders:
             morph_path = os.path.join(BASE_DIR, dataset, f"{morph_name}.jpg")
+
             if not os.path.exists(morph_path): morph_path = morph_path.replace('.jpg', '.png')
                 
             id1 = morph_name.split('-vs-')[0]
             id2 = morph_name.split('-vs-')[1]
             
             try:
+
                 p_minus_path = glob.glob(os.path.join(BONAFIDE_DIR, f'{id1}*'))[0]
                 target_path = glob.glob(os.path.join(BONAFIDE_DIR, f'{id2}*'))[0]
+
             except:
                 continue
                 
             feat_p_minus, feat_target, feat_morph = get_feature(p_minus_path), get_feature(target_path), get_feature(morph_path)
+            
+            
             if any(f is None for f in [feat_p_minus, feat_target, feat_morph]): continue
                 
             base_sim_target = F.cosine_similarity(feat_morph, feat_target).item()
@@ -88,6 +101,8 @@ for model_name in models_tested:
                     
                 sim_target = F.cosine_similarity(feat_gen, feat_target).item()
                 sim_p_minus = F.cosine_similarity(feat_gen, feat_p_minus).item()
+                
+                # Determine if the known identity has been successfully suppressed below the verification threshold
                 is_unpaired = "Yes" if sim_p_minus < THRESHOLD else "No"
                 
                 results_data.append({
@@ -102,7 +117,8 @@ for model_name in models_tested:
                     "Unpaired": is_unpaired
                 })
 
-# Save all evaluation metrics to a CSV file
+
+# Aggregate all computed metrics into a structured dataframe and export to CSV ... 
 if results_data:
     df = pd.DataFrame(results_data)
     df.to_csv(OUTPUT_CSV, index=False)

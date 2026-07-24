@@ -6,8 +6,8 @@ import torch
 from facenet_pytorch import MTCNN
 from PIL import Image
 
-# Config & Paths 
-# ...............................................................................
+# Config & Paths ...............................................................................
+# Defines
 DATASETS = ["OpenCV", "FaceMorpher", "Webmorph", "MIPGAN_I", "MIPGAN_II"]
 BASE_DIR = "/content/drive/MyDrive/HCML_Project/MAD22_Data/extracted_images/original_sorted"
 BONAFIDE_DIR = os.path.join(BASE_DIR, 'BonaFide')
@@ -31,6 +31,7 @@ print("Loading ElasticFace Model...")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 sys.path.insert(0, '/content/drive/MyDrive/HCML_Project/NegFaceDiff/face_recognition_training')
 
+# Init ElasticFace model to extract high-fidelity biometric embeddings
 mtcnn = MTCNN(image_size=112, margin=0, keep_all=False, post_process=False, device=device)
 spec = importlib.util.spec_from_file_location("iresnet_module", '/content/drive/MyDrive/HCML_Project/NegFaceDiff/face_recognition_training/backbones/iresnet.py')
 iresnet = importlib.util.module_from_spec(spec)
@@ -65,6 +66,7 @@ for model_name, checkpoint_path in MODELS.items():
         if not os.path.exists(morph_dir):
             continue
         
+        # Limit evaluation to a representatie subset of morphs per dataset for batch processing
         morph_files = sorted(glob.glob(os.path.join(morph_dir, "*.*")))[:3]
         
         for morph_path in morph_files:
@@ -74,6 +76,7 @@ for model_name, checkpoint_path in MODELS.items():
             # Extract Contexts
             id1 = filename.split('-vs-')[0]
             try:
+                # Retrieve the corresponding bona fide (P-) image to serve as the negative context
                 p_minus_path = glob.glob(os.path.join(BONAFIDE_DIR, f'{id1}*'))[0]
             except IndexError:
                 continue
@@ -83,7 +86,8 @@ for model_name, checkpoint_path in MODELS.items():
             
             if feat_morph is None or feat_bona is None:
                 continue
-                
+            
+            # Structure and serialize the positive (morph) and ....
             contexts = {'0': feat_morph.cpu().squeeze().numpy(), '1': feat_bona.cpu().squeeze().numpy()}
             os.makedirs(os.path.dirname(CONTEXT_SAVE_PATH), exist_ok=True)
             torch.save(contexts, CONTEXT_SAVE_PATH)
@@ -115,4 +119,4 @@ for model_name, checkpoint_path in MODELS.items():
                 else:
                     print(f"    [-] Generation Failed for {w_tag}")
 
-print("\n=== All Architecture Experiments Done! Check ./final_experiments_results ===")
+print("\n ------->>>> All Architecture Experiments Done! Check ./final_experiments_results")
